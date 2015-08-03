@@ -1,0 +1,154 @@
+---
+title: "Regresion Lineal Multiple"
+author: "Andrea Pérez"
+date: "2 de agosto de 2015"
+output: html_document
+---
+Las datas con  las cuales vamos hacer nuestro analisis son:
+poblacion1 y poblacion2, que se muestran a continuacion.
+
+```{r}
+library(readxl)
+po1<-sdata <- read_excel("poblacion1.xlsx",sheet = 1,col_names = TRUE, na=c(""))
+po1
+po2<-sdata <- read_excel("poblacion2.xlsx",sheet = 1,col_names = TRUE, na=c(""))
+po2
+dim(po1)
+dim(po2)
+```
+
+Como podemos observar, la data población1 contiene 44 observaciones de 4 variables.
+La data población2 contiene 40 observaciones de 7 variables.
+
+Ahora mediante la funcion match, uniremos las dos poblaciones en una sola data que se llamara poblacion.
+
+```{r}
+pobla<-match(po1$identificador,po2$identificador)
+poblacion1<-cbind(po1,po2[pobla,])
+poblacion1
+poblacion<-poblacion1[c(-24,-25,-30,-43),]
+```
+
+Luego identificaremos la clase de cada variable y genereraremos diagramas de cajas para variables continuas y diagramas de barras para variables discretas.
+
+```{r}
+for(i in 1:ncol(poblacion)) {
+     print(class(poblacion[,i]))
+}
+
+for(i in 1:ncol(poblacion)) {
+if(is.numeric(poblacion[,i])){
+boxplot(poblacion[,i], xlab = "", ylab=names(poblacion)[i], main=paste("Diag cajas de",names(poblacion)[i]),
+        col="steelblue", border="gray1") 
+}else{
+    barplot(table(poblacion[,i]), xlab = names(poblacion)[i], ylab="Frecuencia", main="Diagrama de barras",
+            col="steelblue", border="gray1")  
+ }
+}
+```
+
+Ahora calcularemos el mínimo, media, máximo, desviación estándar, primer cuartil de cada variable numérica y la frecuencia en el caso de variables categóricas.
+
+```{r}
+for(i in 1:ncol(poblacion)){
+    if(is.numeric(poblacion[,i])){
+        print( paste("El minimo, el maximo, la media,la desviacion estandar y el primer cuartil de ",names(poblacion)[i],"son"))
+              print( c(min(poblacion[,i]),
+                       max(poblacion[,i]),
+                       mean(poblacion[,i]),
+                       sd(poblacion[,i]),
+                       
+                       
+                       quantile(poblacion[,i], probs = seq(0, 1, 0.25), na.rm = FALSE)))
+    }else{
+        print(paste("La frecuencia de ",names(poblacion)[i]))
+        print(table(poblacion[,i]))
+    }
+}
+```
+
+Luego calcularemos la correlación entre la variable dependiente poblacion y cada una de las variables explicativas (numéricas).
+
+```{r}
+r<-numeric(ncol(poblacion))
+for(i in 1:ncol(poblacion)){
+    if(is.numeric(poblacion[,i])){
+    r[i]<-cor(poblacion$poblacion,poblacion[,i])
+  
+    }
+}
+r
+```
+
+Considerando la variable categórica serv.bas.compl con una confiabilidad del 90%, ¿Puede asumirse que la media de la variable poblacion en el grupo serv.bas.compl: SI es distinta a la media del grupo serv.bas.compl: NO ? 
+
+```{r}
+sb1<-subset(poblacion,subset=serv.bas.compl=="SI")
+s1<-sb1$poblacion
+s1
+
+sb2<-subset(poblacion,subset=serv.bas.compl=="NO")
+s2<-sb2$poblacion
+s2
+t.test(s1, s2, alternative = c("two.sided"),
+       mu = 0, paired = FALSE, var.equal = TRUE,
+       conf.level = 0.90)
+```
+
+Como qt=1.685954<t, no se rechaza la hipotesis, por tanto las medias son iguales, por tanto no hago 2 modelos.
+
+
+
+Realizamos el modelo de regresion lineal multiple que mejor se ajusta, en la cual la variable poblacion va a ser explicada por la variable tasa.crimen.
+
+
+```{r}
+library(readxl)
+po1<-sdata <- read_excel("poblacion1.xlsx",sheet = 1,col_names = TRUE, na=c(""))
+po2<-sdata <- read_excel("poblacion2.xlsx",sheet = 1,col_names = TRUE, na=c(""))
+pobla<-match(po1$identificador,po2$identificador)
+poblacion1<-cbind(po1,po2[pobla,])
+poblacion<-poblacion1[c(-24,-25,-30,-43),]
+clase<-sapply(X = poblacion,FUN = class)
+clase
+data<-poblacion[,clase=="numeric"]
+datanum<-data[,c(-1,-5)]
+reg1 <- lm(poblacion~.,datanum)
+regf<-step(object = reg1)
+summary(regf)
+regfinal<-lm(poblacion~tasa.crimen,data = datanum)
+summary(regfinal)
+```
+
+Nuestra regresión explica el 14% de la variabilidad total. Para la significancia de los parametros usamos, la prueba t de Student.
+Sabemos que el fractil de orden 1-alfa/2, lo podemos calcular de la siguiente manera, qt(p = 0.975,df = 38)=2.024394.
+Ahora analicemos la significancia de los parametros mediante la prueba t de Student.
+Para B1:
+Como t=11.147>t(alfa/2)=2.026192, el parametro B1 es significativo.
+Para B2:
+Como t=2.493>t(alfa/2)=2.026192, el parametro B2 es significativo.
+Ahora para la significancia de la regresion utilizamos la prueba F de Fisher, para ello construimos la tabla Anova:
+
+
+```{r}
+anova<-aov(regfinal)
+summary(anova)
+```
+Ahora calculamos el fractil de orden 1-alfa de la tabla de Fisher de la
+siguiente manera:
+qf(p = 0.95,df1 = 1,df2 = 38)=4.098172
+Como F=6.215 >F(alfa)=4.098172, entonces la regresion es significativa.
+
+```{r}
+library(ggplot2)
+u_t<-regfinal$residuals
+g<-ggplot(data=poblacion,aes(x=tasa.crimen,y=u_t))
+g + geom_point()
+```
+
+Mediante el grafico podemos observar que no se violan las hipotesis de normalidad.
+
+```{r}
+qqnorm(u_t)
+qqline(u_t)
+```
